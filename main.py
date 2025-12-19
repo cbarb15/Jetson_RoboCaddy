@@ -16,8 +16,10 @@ import serial
 sys.path.insert(0, '.')
 
 SERIAL_PORT= "/dev/ttyTHS1"   # Jetson Orin Nano
+SERIAL_PORT2 = "/dev/ttyTHS2" # Jetson Orin Nano UART2 Under fan
 BAUD_RATE = 115200
 uart = None
+uart2 = None
 adapter_interface = None
 mainloop = None
 timer_id = None
@@ -30,9 +32,11 @@ dis_path = None
 mn_path  = None
 # ADDED
 found_ts = False
-found_tc = False
+found_left_joystick_tc = False
+found_right_joystick_tc = False
 ts_path = None
-tc_path = None
+left_joystick_chr_path = None
+right_joystick_chr_path = None
 
 devices = {}
 managed_objects_found = 0
@@ -41,21 +45,20 @@ reading_process = None
 def send_joystick_data(joystick_value):
     try:
         print(f"Serial port {SERIAL_PORT} opened successfully.")
-        # num = 3127
         uart.write(joystick_value.to_bytes(2, byteorder='big'))
         uart.flush()
         print(f"Sent: {joystick_value}")
     except serial.SerialException as e:
         print(f"Error opening serial port: {e}")
 
-def joystick_read_process():
+def left_joystick_read_process():
     while 1:
-        read_joystick()
+        read_left_joystick()
 
 
-def read_joystick():
-    global tc_path
-    char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME,tc_path)
+def read_left_joystick():
+    global left_joystick_chr_path
+    char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, left_joystick_chr_path)
     char_interface = dbus.Interface(char_proxy,
     bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE)
     try:
@@ -75,20 +78,23 @@ def read_joystick():
 
 def service_discovery_completed():
     global found_ts
-    global found_tc
+    global found_left_joystick_tc
+    global found_right_joystick_tc
     global ts_path
-    global tc_path
+    global left_joystick_chr_path
+    global right_joystick_chr_path
     global bus
 
-    if found_ts and found_tc:
+    if found_ts and found_left_joystick_tc and found_right_joystick_tc:
         print("Required service and characteristic found - device is OK")
         print("Joystick service path: ", ts_path)
-        print("Joystick characteristic path: ", tc_path)
+        print("Left Joystick characteristic path: ", left_joystick_chr_path)
+        print("Right Joystick characteristic path: ", right_joystick_chr_path)
         reading_process.start()
     else:
         print("Required service and characteristic were not found - device is NOK")
         print("Joystick service found: ", str(found_ts))
-        print("Joystick characteristic found: ", str(found_tc))
+        print("Joystick characteristic found: ", str(found_left_joystick_tc))
     bus.remove_signal_receiver(interfaces_added, "InterfacesAdded")
     bus.remove_signal_receiver(properties_changed, "PropertiesChanged")
     mainloop.quit()
@@ -104,9 +110,11 @@ def list_devices_found():
 
 def interfaces_added(path, interfaces):
     global found_ts
-    global found_tc
+    global found_left_joystick_tc
+    global found_right_joystick_tc
     global ts_path
-    global tc_path
+    global left_joystick_chr_path
+    global right_joystick_chr_path
     if bluetooth_constants.GATT_SERVICE_INTERFACE in interfaces:
         properties = interfaces[bluetooth_constants.GATT_SERVICE_INTERFACE]
         print("--------------------------------------------------------------------------------")
@@ -122,12 +130,16 @@ def interfaces_added(path, interfaces):
 
     if bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE in interfaces:
         properties = interfaces[bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE]
+        print(" Properties :", properties)
         print("  CHR path   :", path)
         if 'UUID' in properties:
             uuid = properties['UUID']
-            if uuid == bluetooth_constants.JOYSTICK_CHR_UUID:
-                found_tc = True
-                tc_path = path
+            if uuid == bluetooth_constants.LEFT_JOYSTICK_CHR_UUID:
+                found_left_joystick_tc = True
+                left_joystick_chr_path = path
+            elif uuid == bluetooth_constants.RIGHT_JOYSTICK_CHR_UUID:
+                found_right_joystick_tc = True
+                right_joystick_chr_path = path
             print("  CHR UUID   : ", bluetooth_utils.dbus_to_python(uuid))
             print("  CHR name   : ", bluetooth_utils.get_name_from_uuid(uuid))
             flags = ""
@@ -292,6 +304,7 @@ if __name__ == '__main__':
 
     try:
         uart = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+        uart2 = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=1)
     except serial.SerialException as e:
         print(f"Error opening serial port: {e}")
 
@@ -311,9 +324,9 @@ if __name__ == '__main__':
     device_path = bluetooth_utils.device_address_to_path(bdaddr, adapter_path)
     device_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, device_path)
     device_interface = dbus.Interface(device_proxy, bluetooth_constants.DEVICE_INTERFACE)
-    reading_process = multiprocessing.Process(target=joystick_read_process)
+    reading_process = multiprocessing.Process(target=left_joystick_read_process)
 
-    time.sleep(2)
+    # time.sleep(2)
     print("Connecting to " + bdaddr)
     connect()
     print("Discovering services++")
@@ -328,5 +341,5 @@ if __name__ == '__main__':
                             path_keyword="path")
     mainloop = GLib.MainLoop()
     mainloop.run()
-    # print("Finished")
+    print("Finished")
     # disconnect()
