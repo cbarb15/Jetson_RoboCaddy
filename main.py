@@ -15,8 +15,10 @@ import serial
 
 sys.path.insert(0, '.')
 
-SERIAL_PORT= "/dev/ttyTHS1"   # Jetson Orin Nano
-SERIAL_PORT2 = "/dev/ttyTHS2" # Jetson Orin Nano UART2 Under fan
+# SERIAL_PORT= "/dev/ttyTHS1"   # Jetson Orin Nano
+SERIAL_PORT = "/dev/ttyACM0"
+# SERIAL_PORT2 = "/dev/ttyTHS2" # Jetson Orin Nano UART2 Under fan
+SERIAL_PORT2 = "/dev/ttyACM1"
 BAUD_RATE = 115200
 uart = None
 uart2 = None
@@ -40,9 +42,10 @@ right_joystick_chr_path = None
 
 devices = {}
 managed_objects_found = 0
-reading_process = None
+left_joystick_reading_process = None
+right_joystick_reading_process = None
 
-def send_joystick_data(joystick_value):
+def send_left_joystick_data(joystick_value):
     try:
         print(f"Serial port {SERIAL_PORT} opened successfully.")
         uart.write(joystick_value.to_bytes(2, byteorder='big'))
@@ -55,24 +58,54 @@ def left_joystick_read_process():
     while 1:
         read_left_joystick()
 
-
 def read_left_joystick():
     global left_joystick_chr_path
-    char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, left_joystick_chr_path)
+    left_joystick_char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, left_joystick_chr_path)
+    left_joystick_char_interface = dbus.Interface(left_joystick_char_proxy,
+    bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE)
+    try:
+        value = left_joystick_char_interface.ReadValue({})
+        print(f"type of value {type(value)}")
+    except Exception as e:
+        print("Failed to read LEFT joystick")
+        print(e.get_dbus_name())
+        print(e.get_dbus_message())
+        return bluetooth_constants.RESULT_EXCEPTION
+    else:
+        joystick = bluetooth_utils.dbus_to_python(int.from_bytes(value, 'big'))
+        send_left_joystick_data(joystick)
+        return bluetooth_constants.RESULT_OK
+
+def send_right_joystick_data(joystick_value):
+    try:
+        print(f"Serial port {SERIAL_PORT2} opened successfully.")
+        uart2.write(joystick_value.to_bytes(2, byteorder='big'))
+        uart2.flush()
+        print(f"Sent: {joystick_value}")
+    except serial.SerialException as e:
+        print(f"Error opening serial port: {e}")
+
+def right_joystick_read_process():
+    while 1:
+        read_right_joystick()
+
+def read_right_joystick():
+    global right_joystick_chr_path
+    char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, right_joystick_chr_path)
     char_interface = dbus.Interface(char_proxy,
     bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE)
     try:
         value = char_interface.ReadValue({})
         print(f"type of value {type(value)}")
     except Exception as e:
-        print("Failed to read joystick")
+        print("Failed to read RIGHT joystick")
         print(e.get_dbus_name())
         print(e.get_dbus_message())
         return bluetooth_constants.RESULT_EXCEPTION
     else:
         joystick = bluetooth_utils.dbus_to_python(int.from_bytes(value, 'big'))
         # print("Joystick value: "+str(joystick))
-        send_joystick_data(joystick)
+        send_right_joystick_data(joystick)
         return bluetooth_constants.RESULT_OK
 
 
@@ -85,12 +118,15 @@ def service_discovery_completed():
     global right_joystick_chr_path
     global bus
 
-    if found_ts and found_left_joystick_tc and found_right_joystick_tc:
+    if found_ts and  found_left_joystick_tc and found_right_joystick_tc:
         print("Required service and characteristic found - device is OK")
         print("Joystick service path: ", ts_path)
         print("Left Joystick characteristic path: ", left_joystick_chr_path)
         print("Right Joystick characteristic path: ", right_joystick_chr_path)
-        reading_process.start()
+        if not left_joystick_reading_process.is_alive():
+            left_joystick_reading_process.start()
+        # if not right_joystick_reading_process.is_alive():
+        #     right_joystick_reading_process.start()
     else:
         print("Required service and characteristic were not found - device is NOK")
         print("Joystick service found: ", str(found_ts))
@@ -324,9 +360,9 @@ if __name__ == '__main__':
     device_path = bluetooth_utils.device_address_to_path(bdaddr, adapter_path)
     device_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, device_path)
     device_interface = dbus.Interface(device_proxy, bluetooth_constants.DEVICE_INTERFACE)
-    reading_process = multiprocessing.Process(target=left_joystick_read_process)
+    left_joystick_reading_process = multiprocessing.Process(target=left_joystick_read_process)
+    # right_joystick_reading_process = multiprocessing.Process(target=right_joystick_read_process)
 
-    # time.sleep(2)
     print("Connecting to " + bdaddr)
     connect()
     print("Discovering services++")
