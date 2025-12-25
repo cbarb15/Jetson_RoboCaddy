@@ -63,17 +63,23 @@ def read_left_joystick():
     left_joystick_char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, left_joystick_chr_path)
     left_joystick_char_interface = dbus.Interface(left_joystick_char_proxy,
     bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE)
+
+    right_joystick_char_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, right_joystick_chr_path)
+    right_joystick_char_interface = dbus.Interface(right_joystick_char_proxy, bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE)
     try:
-        value = left_joystick_char_interface.ReadValue({})
-        print(f"type of value {type(value)}")
+        left_joystick_value = left_joystick_char_interface.ReadValue({})
+        print(f"LEFT Joystick value {type(left_joystick_value)}")
+        right_joystick_value = right_joystick_char_interface.ReadValue({})
     except Exception as e:
         print("Failed to read LEFT joystick")
         print(e.get_dbus_name())
         print(e.get_dbus_message())
         return bluetooth_constants.RESULT_EXCEPTION
     else:
-        joystick = bluetooth_utils.dbus_to_python(int.from_bytes(value, 'big'))
-        send_left_joystick_data(joystick)
+        left_joystick = bluetooth_utils.dbus_to_python(int.from_bytes(left_joystick_value, 'big'))
+        send_left_joystick_data(left_joystick)
+        right_joystick = bluetooth_utils.dbus_to_python(int.from_bytes(right_joystick_value, "big"))
+        send_right_joystick_data(right_joystick)
         return bluetooth_constants.RESULT_OK
 
 def send_right_joystick_data(joystick_value):
