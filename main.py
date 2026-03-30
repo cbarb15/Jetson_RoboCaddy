@@ -67,7 +67,6 @@ def read_joysticks():
     right_joystick_char_interface = dbus.Interface(right_joystick_char_proxy, bluetooth_constants.GATT_CHARACTERISTIC_INTERFACE)
     try:
         left_joystick_value = left_joystick_char_interface.ReadValue({})
-        print(f"LEFT Joystick value {type(left_joystick_value)}")
         right_joystick_value = right_joystick_char_interface.ReadValue({})
     except Exception as e:
         print("Failed to read LEFT joystick")
@@ -76,9 +75,10 @@ def read_joysticks():
         return bluetooth_constants.RESULT_EXCEPTION
     else:
         left_joystick = bluetooth_utils.dbus_to_python(int.from_bytes(left_joystick_value, 'big'))
-        send_left_joystick_data(left_joystick)
+        print(f"LEFT Joystick value {left_joystick}")
+        # send_left_joystick_data(left_joystick)
         right_joystick = bluetooth_utils.dbus_to_python(int.from_bytes(right_joystick_value, "big"))
-        send_right_joystick_data(right_joystick)
+        # send_right_joystick_data(right_joystick)
         return bluetooth_constants.RESULT_OK
 
 def send_right_joystick_data(joystick_value):
@@ -317,32 +317,34 @@ def disconnect():
         return bluetooth_constants.RESULT_OK
 
 if __name__ == '__main__':
-    scantime = 5 * 1000
+    scantime = 2 * 1000
 
-    try:
-        uart = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-        uart2 = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=1)
-    except serial.SerialException as e:
-        print(f"Error opening serial port: {e}")
+    # try:
+    #     uart = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+    #     uart2 = serial.Serial(SERIAL_PORT2, BAUD_RATE, timeout=1)
+    # except serial.SerialException as e:
+    #     print(f"Error opening serial port: {e}")
 
     # dbus initialisation steps
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
-    bdaddr = "D8:3A:DD:CA:6E:3A"
-
-    # ask for a list of devices already known to the BlueZ daemon
+    # bdaddr = "D8:3A:DD:CA:6E:3A"
+    bdaddr = "2C:CF:67:46:97:7F"
+    #
+    # # ask for a list of devices already known to the BlueZ daemon
     print("Listing devices already known to BlueZ:")
     get_known_devices(bus)
     print("Found ", managed_objects_found, " managed device objects")
     print("Scanning")
     discover_devices(bus, scantime)
-
+    
     adapter_path = bluetooth_constants.BLUEZ_NAMESPACE + bluetooth_constants.ADAPTER_NAME
     device_path = bluetooth_utils.device_address_to_path(bdaddr, adapter_path)
     device_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, device_path)
     device_interface = dbus.Interface(device_proxy, bluetooth_constants.DEVICE_INTERFACE)
     joysticks_reading_process = multiprocessing.Process(target=joystick_read_process)
 
+    # time.sleep(10)
     print("Connecting to " + bdaddr)
     connect()
     print("Discovering services++")
