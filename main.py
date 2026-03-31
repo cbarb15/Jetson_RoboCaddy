@@ -7,13 +7,12 @@ import bluetooth_constants
 import dbus
 import dbus.mainloop.glib
 import sys
-import board
 import busio
 from adafruit_bus_device.i2c_device import I2CDevice
 import multiprocessing
 import serial
-import Jetson.GPIO as GPIO
-from Jetson.GPIO import gpio_pin_data
+import RPi.GPIO as GPIO
+import time
 
 sys.path.insert(0, '.')
 
@@ -321,23 +320,22 @@ def disconnect():
 if __name__ == '__main__':
     scantime = 2 * 1000
 
+    led_pin = 7
 
-    model, JETSON_INFO, _channel_data_by_mode = gpio_pin_data.get_data()
-    board = _channel_data_by_mode["BOARD"]
-    pin33 = board[33]
-    # print(f"channel {pin33.channel}")
-    # print(f"chip fd {pin33.chip_fd}")
-    # print(f"lineHandle {pin33.line_handle}")
-    # print(f"Line offset {pin33.line_offset}")
-    # print(f"direction {pin33.direction}")
-    # print(f"edge {pin33.edge}")
-    # print(f"consumer {pin33.consumer}")
-    # print(f"gpio_name {pin33.gpio_name}")
-    # print(f"gpio_chip {pin33.gpio_chip}")
-    # print(f"pwm_chip_dir {pin33.pwm_chip_dir}")
-    # print(f"pwm_id {pin33.pwm_id}")
+    # Set up the GPIO channel
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setup(led_pin, GPIO.OUT, initial=GPIO.HIGH)
 
-    GPIO.setup(33, GPIO.OUT)
+    print("Press CTRL+C when you want the LED to stop blinking")
+
+    # Blink the LED
+    while True:
+        time.sleep(0.5)
+        GPIO.output(led_pin, GPIO.HIGH)
+        print("LED is ON")
+        time.sleep(0.5)
+        GPIO.output(led_pin, GPIO.LOW)
+        print("LED is OFF")
 
     # try:
     #     uart = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
