@@ -11,7 +11,7 @@ import busio
 from adafruit_bus_device.i2c_device import I2CDevice
 import multiprocessing
 import serial
-import RPi.GPIO as GPIO
+import Jetson.GPIO as GPIO
 import time
 
 sys.path.insert(0, '.')
@@ -21,6 +21,9 @@ SERIAL_PORT = "/dev/ttyACM0"
 # SERIAL_PORT2 = "/dev/ttyTHS2" # Jetson Orin Nano UART2 Under fan
 SERIAL_PORT2 = "/dev/ttyACM1"
 BAUD_RATE = 115200
+SCAN_TIME = 2 * 1000
+DEVICE_ADDRESS = "2C:CF:67:46:97:7F"
+bus = None
 uart = None
 uart2 = None
 adapter_interface = None
@@ -44,6 +47,7 @@ right_joystick_chr_path = None
 devices = {}
 managed_objects_found = 0
 joysticks_reading_process = None
+button_callback_process = None
 
 def send_left_joystick_data(joystick_value):
     try:
@@ -317,25 +321,37 @@ def disconnect():
         print("Disconnected OK")
         return bluetooth_constants.RESULT_OK
 
+def button_callback(channel):
+    global mainloop
+    # # ask for a list of devices already known to the BlueZ daemon
+    # print("Listing devices already known to BlueZ:")
+    # get_known_devices(bus)
+    # print("Found ", managed_objects_found, " managed device objects")
+    print("Scanning")
+    discover_devices(bus, SCAN_TIME)
+
+    time.sleep(4)
+
+    print("Connecting to " + DEVICE_ADDRESS)
+    connect()
+    print("Discovering services++")
+    print("Registering to receive InterfacesAdded signals")
+    bus.add_signal_receiver(interfaces_added,
+                            dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
+                            signal_name="InterfacesAdded")
+    print("Registering to receive PropertiesChanged signals")
+    bus.add_signal_receiver(properties_changed,
+                            dbus_interface=bluetooth_constants.DBUS_PROPERTIES,
+                            signal_name="PropertiesChanged",
+                            path_keyword="path")
+    mainloop = GLib.MainLoop()
+    mainloop.run()
+    print("Finished")
+
 if __name__ == '__main__':
-    scantime = 2 * 1000
-
-    led_pin = 7
-
-    # Set up the GPIO channel
     GPIO.setmode(GPIO.BOARD)
-    GPIO.setup(led_pin, GPIO.OUT, initial=GPIO.HIGH)
-
-    print("Press CTRL+C when you want the LED to stop blinking")
-
-    # Blink the LED
-    while True:
-        time.sleep(0.5)
-        GPIO.output(led_pin, GPIO.HIGH)
-        print("LED is ON")
-        time.sleep(0.5)
-        GPIO.output(led_pin, GPIO.LOW)
-        print("LED is OFF")
+    GPIO.setup(18, GPIO.IN)
+    GPIO.add_event_detect(18, GPIO.FALLING, callback=button_callback)
 
     # try:
     #     uart = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
@@ -344,38 +360,16 @@ if __name__ == '__main__':
     #     print(f"Error opening serial port: {e}")
 
     # dbus initialisation steps
-    # dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-    # bus = dbus.SystemBus()
-    # # bdaddr = "D8:3A:DD:CA:6E:3A"
-    # bdaddr = "2C:CF:67:46:97:7F"
-    # #
-    # # # ask for a list of devices already known to the BlueZ daemon
-    # print("Listing devices already known to BlueZ:")
-    # get_known_devices(bus)
-    # print("Found ", managed_objects_found, " managed device objects")
-    # print("Scanning")
-    # discover_devices(bus, scantime)
-    #
-    # adapter_path = bluetooth_constants.BLUEZ_NAMESPACE + bluetooth_constants.ADAPTER_NAME
-    # device_path = bluetooth_utils.device_address_to_path(bdaddr, adapter_path)
-    # device_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, device_path)
-    # device_interface = dbus.Interface(device_proxy, bluetooth_constants.DEVICE_INTERFACE)
-    # joysticks_reading_process = multiprocessing.Process(target=joystick_read_process)
-    #
-    # # time.sleep(10)
-    # print("Connecting to " + bdaddr)
-    # connect()
-    # print("Discovering services++")
-    # print("Registering to receive InterfacesAdded signals")
-    # bus.add_signal_receiver(interfaces_added,
-    #                         dbus_interface=bluetooth_constants.DBUS_OM_IFACE,
-    #                         signal_name="InterfacesAdded")
-    # print("Registering to receive PropertiesChanged signals")
-    # bus.add_signal_receiver(properties_changed,
-    #                         dbus_interface=bluetooth_constants.DBUS_PROPERTIES,
-    #                         signal_name="PropertiesChanged",
-    #                         path_keyword="path")
-    # mainloop = GLib.MainLoop()
-    # mainloop.run()
-    # print("Finished")
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+
+    adapter_path = bluetooth_constants.BLUEZ_NAMESPACE + bluetooth_constants.ADAPTER_NAME
+    device_path = bluetooth_utils.device_address_to_path(DEVICE_ADDRESS, adapter_path)
+    device_proxy = bus.get_object(bluetooth_constants.BLUEZ_SERVICE_NAME, device_path)
+    device_interface = dbus.Interface(device_proxy, bluetooth_constants.DEVICE_INTERFACE)
+    joysticks_reading_process = multiprocessing.Process(target=joystick_read_process)
+
     # disconnect()
+
+    while 1:
+        continue
